@@ -1,73 +1,125 @@
 
 const axios = require("axios");
-const FormData = require("form-data");
 const fs = require("fs");
 
-const AI_SERVICE_URL = "http://127.0.0.1:8000";
+const HF_SPACE_ID = "Ansh-S30/roadeye-ai-detection";
+const HF_ENDPOINT = "/detect_potholes";
+
+let gradioClientPromise = null;
+
+const getGradioClient = async () => {
+    if (!gradioClientPromise) {
+        gradioClientPromise = (async () => {
+            const { Client } = await import("@gradio/client");
+            return Client.connect(HF_SPACE_ID);
+        })();
+    }
+
+    try {
+        return await gradioClientPromise;
+    } catch (error) {
+        gradioClientPromise = null;
+        throw error;
+    }
+};
 
 const detectPotholes = async (imagePath, originalName) => {
     try {
-        const formData = new FormData();
+        if (!imagePath || !fs.existsSync(imagePath)) {
+            throw new Error("Uploaded image file was not found.");
+        }
 
-        formData.append("file", fs.createReadStream(imagePath), {
-            filename: originalName
-        });
+        const { handle_file } = await import("@gradio/client");
+        const client = await getGradioClient();
 
-        const response = await axios.post(
-            `${AI_SERVICE_URL}/detect/image`,
-            formData,
-            {
-                headers: formData.getHeaders(),
-                timeout: 120000,
-                maxBodyLength: Infinity
-            }
-        );
+        console.log(`Sending ${originalName} to Hugging Face AI...`);
 
-        return response.data;
+        const response = await client.predict(HF_ENDPOINT, [
+            handle_file(imagePath)
+        ]);
+
+        const [annotatedImage, detectionResults] = response.data || [];
+
+        if (!annotatedImage || !detectionResults) {
+            throw new Error("Hugging Face returned an incomplete response.");
+        }
+
+        const annotatedImageUrl =
+            typeof annotatedImage === "string"
+                ? annotatedImage
+                : annotatedImage.url;
+
+        if (!annotatedImageUrl) {
+            throw new Error("Annotated image URL was not returned.");
+        }
+
+        if (
+            !detectionResults.success ||
+            !Array.isArray(detectionResults.detections) ||
+            typeof detectionResults.total_potholes !== "number"
+        ) {
+            throw new Error("Invalid detection results returned by AI service.");
+        }
+
+        return {
+            ...detectionResults,
+            annotated_image: annotatedImageUrl
+        };
 
     } catch (error) {
         console.error(
-            "AI Service Error:",
-            error.response?.data || error.message
+            "Hugging Face AI Service Error:",
+            error.message
         );
 
-        throw new Error("Pothole detection service is unavailable.");
+        throw new Error(
+            `Pothole detection service failed: ${error.message}`
+        );
     }
 };
 
-const fetchAnnotatedImage = async (imagePath) => {
-    let imageUrl;
-
+const fetchAnnotatedImage = async (imageUrl) => {
     try {
-        imageUrl = new URL(imagePath, `${AI_SERVICE_URL}/`);
-    } catch {
-        throw new Error("AI service returned an invalid annotated image path.");
-    }
+        const parsedUrl = new URL(imageUrl);
 
-    const serviceUrl = new URL(AI_SERVICE_URL);
-    if (
-        imageUrl.origin !== serviceUrl.origin ||
-        !imageUrl.pathname.startsWith("/results/")
-    ) {
-        throw new Error("AI service returned an invalid annotated image path.");
-    }
+        const isAllowedHost =
+            parsedUrl.protocol === "https:" &&
+            (
+                parsedUrl.hostname.endsWith(".hf.space") ||
+                parsedUrl.hostname === "huggingface.co" ||
+                parsedUrl.hostname.endsWith(".huggingface.co")
+            );
 
-    try {
-        const response = await axios.get(imageUrl.href, {
+        if (!isAllowedHost) {
+            throw new Error("AI service returned an invalid image URL.");
+        }
+
+        const response = await axios.get(parsedUrl.href, {
             responseType: "arraybuffer",
-            timeout: 30000
+            timeout: 60000
         });
+
         const contentType = response.headers["content-type"] || "";
 
         if (!contentType.startsWith("image/")) {
-            throw new Error("AI service did not return an image.");
+            throw new Error("AI service did not return a valid image.");
         }
 
         return Buffer.from(response.data);
+
     } catch (error) {
-        console.error("Annotated image fetch error:", error.message);
-        throw new Error("Unable to retrieve the annotated image from the AI service.");
+        console.error(
+            "Annotated Image Fetch Error:",
+            error.message
+        );
+
+        throw new Error(
+            "Unable to retrieve the annotated image from Hugging Face."
+        );
     }
 };
 
-module.exports = { detectPotholes, fetchAnnotatedImage };
+module.exports = {
+    detectPotholes,
+    fetchAnnotatedImage
+};

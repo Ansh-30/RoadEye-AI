@@ -13,6 +13,7 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "@gradio/client": "^2.8.0",
     "@prisma/client": "^6.19.3",
     "axios": "^1.21.1",
     "bcryptjs": "^3.0.3",
