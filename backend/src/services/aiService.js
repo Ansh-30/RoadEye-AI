@@ -11,7 +11,14 @@ const getGradioClient = async () => {
     if (!gradioClientPromise) {
         gradioClientPromise = (async () => {
             const { Client } = await import("@gradio/client");
-            return Client.connect(HF_SPACE_ID);
+
+            if (!process.env.HF_TOKEN) {
+                throw new Error("HF_TOKEN environment variable is missing.");
+            }
+
+            return Client.connect(HF_SPACE_ID, {
+                token: process.env.HF_TOKEN
+            });
         })();
     }
 
