@@ -1,0 +1,49 @@
+
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+
+# Python virtual environments
+.venv/
+**/.venv/
+venv/
+env/
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Next.js
+frontend/.next/
+frontend/out/
+frontend/build/
+
+# AI generated files
+ai/results/
+ai/uploads/
+
+# Logs and temporary files
+*.log
+*.tmp
+*.bak
+
+# Cloud credentials
+service-account*.json
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Generated Prisma client
+backend/generated/prisma/
+
+# AI coding agent generated skills
+**/.agents/skills/
+**/.claude/skills/
+**/.cursor/skills/
+**/.devin/skills/

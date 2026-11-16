@@ -1,0 +1,77 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  CITIZEN
+  ADMIN
+}
+
+enum ReportStatus {
+  REPORTED
+  VERIFIED
+  IN_PROGRESS
+  RESOLVED
+  REJECTED
+}
+
+enum DuplicateReviewDecision {
+  DUPLICATE
+  NOT_DUPLICATE
+}
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  password  String
+  role      UserRole @default(CITIZEN)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  reports                  Report[]
+  duplicateReviewsReviewed DuplicateReview[] @relation("DuplicateReviewReviewer")
+}
+
+model Report {
+  id               String       @id @default(cuid())
+  imageUrl         String
+  originalImageUrl String?
+  latitude         Float?
+  longitude        Float?
+  locationAddress  String?
+  detectionLabel   String       @default("pothole")
+  confidence       Float?
+  detectionCount   Int          @default(1)
+  status           ReportStatus @default(REPORTED)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  duplicateReviewsAsA DuplicateReview[] @relation("DuplicateReviewReportA")
+  duplicateReviewsAsB DuplicateReview[] @relation("DuplicateReviewReportB")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model DuplicateReview {
+  id           String                  @id @default(cuid())
+  reportAId    String
+  reportBId    String
+  decision     DuplicateReviewDecision
+  reviewedById String
+  reviewedAt   DateTime                @default(now())
+  createdAt    DateTime                @default(now())
+
+  reportA    Report @relation("DuplicateReviewReportA", fields: [reportAId], references: [id], onDelete: Cascade)
+  reportB    Report @relation("DuplicateReviewReportB", fields: [reportBId], references: [id], onDelete: Cascade)
+  reviewedBy User   @relation("DuplicateReviewReviewer", fields: [reviewedById], references: [id], onDelete: Restrict)
+
+  @@unique([reportAId, reportBId])
+}
